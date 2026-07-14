@@ -41,6 +41,7 @@
 const input = document.getElementById("message");
 const chat = document.getElementById("chat-box");
 const sendBtn = document.getElementById("send-btn");
+const displayedProperties = new Map();
 
 input.addEventListener("keypress", function (e) {
   if (e.key === "Enter") {
@@ -64,6 +65,7 @@ function renderBotMessage(text) {
 }
 
 function propertyCard(p) {
+  displayedProperties.set(String(p.id), p);
   const price = Number(p.price);
   const priceDisplay = isNaN(price) ? "N/A" : price.toLocaleString();
   const imageUrl = propertyImageUrl(p);
@@ -102,14 +104,66 @@ function propertyImageUrl(p) {
   return p.image || "/static/first.jpg";
 }
 
+function showPropertyDetails(p) {
+  const price = Number(p.price);
+  const priceDisplay = isNaN(price) ? "N/A" : price.toLocaleString();
+  const mapQuery = [p.location, p.city, p.state, p.country].filter(Boolean).join(", ");
+  const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
+  const mapPageUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+  const amenities = Array.isArray(p.amenities) && p.amenities.length
+    ? p.amenities.map(amenity => `<span class="amenity">${escapeHtml(amenity)}</span>`).join("")
+    : '<span class="muted">Amenities not listed</span>';
+
+  document.getElementById("property-modal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="property-modal" id="property-modal" role="dialog" aria-modal="true" aria-label="Property details">
+      <div class="property-modal__panel">
+        <button class="property-modal__close" type="button" aria-label="Close details">&times;</button>
+        <img class="property-modal__image" src="${propertyImageUrl(p)}" alt="${escapeHtml(p.title ?? "Property")}">
+        <div class="property-modal__content">
+          <p class="property-modal__eyebrow">${escapeHtml(p.status ?? "Property")}</p>
+          <h2>${escapeHtml(p.title)}</h2>
+          <p class="property-modal__location">📍 ${escapeHtml(p.location)}, ${escapeHtml(p.state)}</p>
+          <section class="property-map">
+            <div class="property-map__heading">
+              <h3>Location</h3>
+              <a href="${mapPageUrl}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>
+            </div>
+            <iframe src="${mapEmbedUrl}" title="Map for ${escapeHtml(p.title ?? "property")}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+          </section>
+          <div class="property-modal__facts">
+            <div><span>Price</span><strong>₹${priceDisplay}</strong></div>
+            <div><span>Type</span><strong>${escapeHtml(p.type)}</strong></div>
+            <div><span>Area</span><strong>${escapeHtml(p.area_sqft)} sqft</strong></div>
+            <div><span>Bedrooms</span><strong>${escapeHtml(p.bedrooms)}</strong></div>
+          </div>
+          <h3>Amenities</h3>
+          <div class="amenities">${amenities}</div>
+          <div class="property-modal__contact">
+            <strong>${escapeHtml(p.contact_person ?? "Sales team")}</strong>
+            <a href="tel:${escapeHtml(p.contact ?? "")}">📞 ${escapeHtml(p.contact ?? "Not available")}</a>
+            <a href="mailto:${escapeHtml(p.email ?? "")}">${escapeHtml(p.email ?? "")}</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
 // Handle clicks on dynamically-added "View Details" buttons
 chat.addEventListener("click", function (e) {
   const btn = e.target.closest(".details-btn");
   if (!btn) return;
   const id = btn.dataset.id;
-  // Replace with whatever you actually want to happen, e.g.:
-  // window.location.href = `/property/${id}`;
-  console.log("View details for property:", id);
+  const property = displayedProperties.get(id);
+  if (property) showPropertyDetails(property);
+});
+
+document.addEventListener("click", function (e) {
+  const modal = document.getElementById("property-modal");
+  if (modal && (e.target === modal || e.target.closest(".property-modal__close"))) {
+    modal.remove();
+  }
 });
 
 let isSending = false;
