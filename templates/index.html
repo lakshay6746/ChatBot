@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Havo Ai</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<!-- Markdown parser + sanitizer for bot replies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+<div class="chat-container">
+
+    <div class="header">
+        🤖 Huvo Ai
+    </div>
+
+    <div id="chat-box"></div>
+
+    <div class="input-area">
+
+        <input
+            type="text"
+            id="message"
+            placeholder="Ask anything..."
+        >
+
+        <button id="send-btn" onclick="sendMessage()">➤</button>
+
+    </div>
+
+</div>
+
+<script>
+const input = document.getElementById("message");
+const chat = document.getElementById("chat-box");
+const sendBtn = document.getElementById("send-btn");
+
+input.addEventListener("keypress", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Prevent HTML/script injection from user text (user bubble)
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+// Render bot replies as sanitized Markdown -> HTML
+function renderBotMessage(text) {
+  const rawHtml = marked.parse(text ?? "", { breaks: true });
+  const cleanHtml = DOMPurify.sanitize(rawHtml);
+  return `<div class="message bot">${cleanHtml}</div>`;
+}
+
+function propertyCard(p) {
+  const price = Number(p.price);
+  const priceDisplay = isNaN(price) ? "N/A" : price.toLocaleString();
+  const imageUrl = propertyImageUrl(p);
+  // Accept both the current JSON field names and earlier card field names.
+  p.area = p.area_sqft ?? p.area ?? "N/A";
+  p.contact_name = p.contact_person ?? p.contact_name ?? "Not provided";
+
+  return `
+    <div class="property-card">
+      <img class="property-image" src="${imageUrl}" alt="${escapeHtml(p.title ?? "Property")}" onerror="this.onerror=null; this.src='/static/first.jpg';">
+
+
+
+      <div class="property-title">🏡 ${escapeHtml(p.title)}</div>
+      <div class="badge">⭐ Premium Property</div>
+      <div class="property-info">
+        <div>📍 ${escapeHtml(p.location)}</div>
+        <div>💰 ₹${priceDisplay}</div>
+        <div>📐 ${escapeHtml(p.area)} sqft</div>
+        <div>🛏 ${escapeHtml(p.bedrooms)} Bedrooms</div>
+        <div>🛁 ${escapeHtml(p.bathrooms)} Bathrooms</div>
+        <div>🚗 Parking : ${escapeHtml(p.parking)}</div>
+        <div>🛋 ${escapeHtml(p.furnished)}</div>
+      </div>
+      <div class="contact">
+        👤 ${escapeHtml(p.contact_name)}
+        <br>
+        📞 ${escapeHtml(p.contact)}
+      </div>
+      <button class="details-btn" data-id="${escapeHtml(p.id ?? "")}">View Details</button>
+    </div>
+  `;
+}
+
+function propertyImageUrl(p) {
+  return p.image || "/static/first.jpg";
+}
+
+// Handle clicks on dynamically-added "View Details" buttons
+chat.addEventListener("click", function (e) {
+  const btn = e.target.closest(".details-btn");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  // Replace with whatever you actually want to happen, e.g.:
+  // window.location.href = `/property/${id}`;
+  console.log("View details for property:", id);
+});
+
+let isSending = false;
+
+async function sendMessage() {
+  if (isSending) return; // stop double-submits
+
+  const message = input.value.trim();
+  if (message === "") return;
+
+  isSending = true;
+  input.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+
+  chat.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message user">${escapeHtml(message)}</div>`
+  );
+  input.value = "";
+
+
+const typingId = `typing-${Date.now()}`;
+
+chat.insertAdjacentHTML(
+  "beforeend",
+  `
+<div class="message bot typing" id="${typingId}">
+    <div class="typing-loader">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+</div>
+`
+);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const response = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    document.getElementById(typingId)?.remove();
+
+    if (data.properties && data.properties.length > 0) {
+      data.properties.forEach(p => {
+        chat.insertAdjacentHTML("beforeend", propertyCard(p));
+      });
+    } else {
+      chat.insertAdjacentHTML("beforeend", renderBotMessage(data.reply ?? ""));
+    }
+  } catch (err) {
+    document.getElementById(typingId)?.remove();
+    chat.insertAdjacentHTML(
+      "beforeend",
+      `<div class="message bot error">Something went wrong. Please try again.</div>`
+    );
+    console.error("Chat request failed:", err);
+  } finally {
+    isSending = false;
+    input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    input.focus();
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+</script>
+
+</body>
+</html>
