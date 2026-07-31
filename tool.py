@@ -1,47 +1,50 @@
 import json
 import math
-import os
 import re
 from threading import local
 from typing import Optional
 from urllib.parse import quote
-from urllib.request import urlopen
 
 
 # Keep the matching listings available to the Flask route that initiated the
 # Gemini tool call, so it can return structured cards to the browser.
 _search_state = local()
-_geocode_cache: dict[str, Optional[tuple[float, float]]] = {}
+
+# Development-only map points. They make location fallback work without a
+# paid Maps provider. Add real coordinates to property.json before presenting
+# these distances as actual travel distances.
+MOCK_LOCATION_COORDINATES = {
+    "whitefield": (12.9698, 77.7500),
+    "electronic city": (12.8456, 77.6603),
+    "sarjapur": (12.9008, 77.6876),
+    "bengaluru": (12.9716, 77.5946),
+    "bangalore": (12.9716, 77.5946),
+    "delhi": (28.6139, 77.2090),
+    "noida": (28.5355, 77.3910),
+    "gurugram": (28.4595, 77.0266),
+    "faridabad": (28.4089, 77.3178),
+    "ghaziabad": (28.6692, 77.4538),
+    "mumbai": (19.0760, 72.8777),
+    "navi mumbai": (19.0330, 73.0297),
+    "thane": (19.2183, 72.9781),
+    "pune": (18.5204, 73.8567),
+    "hyderabad": (17.3850, 78.4867),
+    "chennai": (13.0827, 80.2707),
+    "jaipur": (26.9124, 75.7873),
+    "ahmedabad": (23.0225, 72.5714),
+    "kolkata": (22.5726, 88.3639),
+    "kochi": (9.9312, 76.2673),
+    "chandigarh": (30.7333, 76.7794),
+}
 
 
-def _google_maps_coordinates(location: str) -> Optional[tuple[float, float]]:
-    """Resolve a place with Google Maps Geocoding, returning latitude/longitude.
-
-    Set GOOGLE_MAPS_API_KEY and enable the Geocoding API in the Google Cloud
-    project. Failures deliberately return None so a property search still works
-    when Maps is unavailable or the key has not been configured.
-    """
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-    query = _normalise(location)
-    if not api_key or not query:
-        return None
-    if query in _geocode_cache:
-        return _geocode_cache[query]
-
-    url = (
-        "https://maps.googleapis.com/maps/api/geocode/json?"
-        f"address={quote(location + ', India')}&key={quote(api_key)}"
-    )
-    try:
-        with urlopen(url, timeout=4) as response:
-            payload = json.load(response)
-        result = (payload.get("results") or [])[0]
-        coordinates = result.get("geometry", {}).get("location", {})
-        resolved = (float(coordinates["lat"]), float(coordinates["lng"]))
-    except (IndexError, KeyError, OSError, ValueError, TypeError):
-        resolved = None
-    _geocode_cache[query] = resolved
-    return resolved
+def _mock_coordinates(location: str) -> Optional[tuple[float, float]]:
+    """Resolve a known Indian locality from the local mock map, with no API call."""
+    normalized = _normalise(location)
+    for name in sorted(MOCK_LOCATION_COORDINATES, key=len, reverse=True):
+        if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", normalized):
+            return MOCK_LOCATION_COORDINATES[name]
+    return None
 
 
 def _haversine_km(first: tuple[float, float], second: tuple[float, float]) -> float:
@@ -53,30 +56,20 @@ def _haversine_km(first: tuple[float, float], second: tuple[float, float]) -> fl
     return 6371.0088 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _listing_coordinates(listing: dict) -> Optional[tuple[float, float]]:
-    """Read the verified coordinates stored against a property listing."""
-    coordinates = listing.get("coordinates") or {}
-    try:
-        latitude, longitude = float(coordinates["latitude"]), float(coordinates["longitude"])
-    except (KeyError, TypeError, ValueError):
-        return None
-    return (latitude, longitude) if -90 <= latitude <= 90 and -180 <= longitude <= 180 else None
-
-
-def _rank_by_google_maps_distance(properties: list[dict], requested_location: str) -> list[dict]:
-    """Rank catalogue listings by distance from a Google Maps-resolved location."""
-    origin = _google_maps_coordinates(requested_location)
+def _rank_by_mock_distance(properties: list[dict], requested_location: str) -> list[dict]:
+    """Rank catalogue cities using local mock coordinates, without an API key."""
+    origin = _mock_coordinates(requested_location)
     if not origin:
         return []
 
     ranked = []
     for listing in properties:
-        coordinates = _listing_coordinates(listing)
+        coordinates = _mock_coordinates(f'{listing.get("location", "")} {listing.get("city", "")}')
         if not coordinates:
             continue
         item = listing.copy()
         item["distance_km"] = round(_haversine_km(origin, coordinates), 1)
-        item["distance_source"] = "Google Maps geocoding"
+        item["distance_source"] = "mock location estimate"
         ranked.append(item)
     return sorted(ranked, key=lambda item: (item["distance_km"], -float(item.get("rating") or 0)))
 
@@ -459,11 +452,10 @@ def search_properties_from_message(message: str, limit: int = 6) -> list[dict]:
                 ], source="direct")
 
     nearby_matches = []
-    # If the requested locality has no listing, resolve it with Google Maps and
-    # show the closest catalogue entries instead of returning an empty search.
-    # Listing coordinates must be accurate for this ranking to be meaningful.
+    # If the requested locality has no listing, use local mock map points to
+    # show the nearest catalogue area instead of returning an empty search.
     if not direct_matches and requested_location:
-        distance_ranked = _rank_by_google_maps_distance(
+        distance_ranked = _rank_by_mock_distance(
             [p for p in properties if matches_criteria(p)], requested_location
         )
         if distance_ranked:
@@ -571,7 +563,7 @@ def search_properties(
 
     nearby_results = []
     if location and not direct_results:
-        distance_ranked = _rank_by_google_maps_distance(properties, location)
+        distance_ranked = _rank_by_mock_distance(properties, location)
         if distance_ranked:
             nearby_results = add_map_links(add_valid_image_urls(
                 distance_ranked[:max(1, min(3, limit))]

@@ -296,7 +296,7 @@ function propertyCard(p) {
   p.area = p.area_sqft ?? p.area ?? "N/A";
   p.contact_name = p.contact_person ?? p.contact_name ?? "Not provided";
   const distanceHtml = Number.isFinite(Number(p.distance_km))
-    ? `<div class="property-distance">Nearest match: ${escapeHtml(p.distance_km)} km away</div>`
+    ? `<div class="property-distance">Approximate distance: ${escapeHtml(p.distance_km)} km away</div>`
     : '';
   const mapHtml = p.map_link
     ? `<a class="map-link" href="${escapeHtml(p.map_link)}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>`
