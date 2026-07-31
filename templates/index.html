@@ -295,6 +295,9 @@ function propertyCard(p) {
   // Accept both the current JSON field names and earlier card field names.
   p.area = p.area_sqft ?? p.area ?? "N/A";
   p.contact_name = p.contact_person ?? p.contact_name ?? "Not provided";
+  const distanceHtml = Number.isFinite(Number(p.distance_km))
+    ? `<div class="property-distance">Nearest match: ${escapeHtml(p.distance_km)} km away</div>`
+    : '';
   const mapHtml = p.map_link
     ? `<a class="map-link" href="${escapeHtml(p.map_link)}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>`
     : '';
@@ -307,6 +310,7 @@ function propertyCard(p) {
 
       <div class="property-title">&#127969; ${escapeHtml(p.title)}</div>
       <div class="badge">&#11088; Premium Property</div>
+      ${distanceHtml}
       ${mapHtml ? `<div class="property-map-link">${mapHtml}</div>` : ''}
       <div class="property-info">
         <div>&#128205; ${escapeHtml(p.location)}</div>

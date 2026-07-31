@@ -168,9 +168,19 @@ def is_property_query(message: str) -> bool:
     if any(word in query for word in PROPERTY_INTENT_TERMS):
         return True
 
+    # A short request such as "Near Whitefield" is an implicit request for
+    # property recommendations, even though it does not repeat "property".
+    if re.search(r"\bnear\s+[a-z0-9]", query):
+        return True
+
     # A message containing one of the catalogue's supported locations is also
     # a property-search request, even when the user only types a city name.
     return any(location.casefold() in query for location in get_supported_locations())
+
+
+def is_nearby_only_request(message: str) -> bool:
+    """Allow concise requests such as 'near Whitefield' without a budget."""
+    return bool(re.search(r"\bnear\s+[a-z0-9]", message.casefold()))
 
 
 def has_supported_location(message: str) -> bool:
@@ -180,6 +190,11 @@ def has_supported_location(message: str) -> bool:
         re.search(rf"(?<!\w){re.escape(location.casefold())}(?!\w)", query)
         for location in get_supported_locations()
     )
+
+
+def has_searchable_location(message: str) -> bool:
+    """Accept catalogue locations and new localities that Maps can resolve."""
+    return has_supported_location(message) or has_explicit_location(message)
 
 
 def reply_for_results(reply: str, properties: list[dict], nearby_results: list[dict]) -> str:
@@ -226,7 +241,7 @@ def build_property_reply(user_message: str, properties: list[dict], nearby_resul
         return f"I found {len(properties)} matching property option(s) for your request."
 
     if nearby_results:
-        return "I found a few nearby options you can compare."
+        return "I could not find an exact listing there, but I found nearby options you can compare."
 
     supported_locations = ", ".join(get_supported_locations()[:40])
     return (
@@ -281,7 +296,7 @@ def chatbot():
         property_question = True
         if pending_search["awaiting"] == "location":
             search_message = f'{pending_search["query"]} in {search_message}'
-            if has_supported_location(search_message):
+            if has_searchable_location(search_message):
                 if extract_max_price(search_message):
                     ready_to_search = True
                     with _conversation_lock:
@@ -309,14 +324,14 @@ def chatbot():
         project_matches = selected_project_matches(search_message)
         if project_matches:
             ready_to_search = True
-        elif not has_supported_location(search_message):
+        elif not has_searchable_location(search_message):
             with _conversation_lock:
                 _conversation_pending_searches[conversation] = {
                     "query": search_message, "awaiting": "location"
                 }
             intake_reply = "Which city or locality are you looking in?"
             next_step = "location"
-        elif not extract_max_price(search_message):
+        elif not extract_max_price(search_message) and not is_nearby_only_request(search_message):
             with _conversation_lock:
                 _conversation_pending_searches[conversation] = {
                     "query": search_message, "awaiting": "budget"

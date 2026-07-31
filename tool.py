@@ -1,13 +1,84 @@
 import json
+import math
+import os
 import re
 from threading import local
 from typing import Optional
 from urllib.parse import quote
+from urllib.request import urlopen
 
 
 # Keep the matching listings available to the Flask route that initiated the
 # Gemini tool call, so it can return structured cards to the browser.
 _search_state = local()
+_geocode_cache: dict[str, Optional[tuple[float, float]]] = {}
+
+
+def _google_maps_coordinates(location: str) -> Optional[tuple[float, float]]:
+    """Resolve a place with Google Maps Geocoding, returning latitude/longitude.
+
+    Set GOOGLE_MAPS_API_KEY and enable the Geocoding API in the Google Cloud
+    project. Failures deliberately return None so a property search still works
+    when Maps is unavailable or the key has not been configured.
+    """
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+    query = _normalise(location)
+    if not api_key or not query:
+        return None
+    if query in _geocode_cache:
+        return _geocode_cache[query]
+
+    url = (
+        "https://maps.googleapis.com/maps/api/geocode/json?"
+        f"address={quote(location + ', India')}&key={quote(api_key)}"
+    )
+    try:
+        with urlopen(url, timeout=4) as response:
+            payload = json.load(response)
+        result = (payload.get("results") or [])[0]
+        coordinates = result.get("geometry", {}).get("location", {})
+        resolved = (float(coordinates["lat"]), float(coordinates["lng"]))
+    except (IndexError, KeyError, OSError, ValueError, TypeError):
+        resolved = None
+    _geocode_cache[query] = resolved
+    return resolved
+
+
+def _haversine_km(first: tuple[float, float], second: tuple[float, float]) -> float:
+    """Return the straight-line distance between two latitude/longitude pairs."""
+    lat1, lon1 = map(math.radians, first)
+    lat2, lon2 = map(math.radians, second)
+    delta_lat, delta_lon = lat2 - lat1, lon2 - lon1
+    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    return 6371.0088 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _listing_coordinates(listing: dict) -> Optional[tuple[float, float]]:
+    """Read the verified coordinates stored against a property listing."""
+    coordinates = listing.get("coordinates") or {}
+    try:
+        latitude, longitude = float(coordinates["latitude"]), float(coordinates["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (latitude, longitude) if -90 <= latitude <= 90 and -180 <= longitude <= 180 else None
+
+
+def _rank_by_google_maps_distance(properties: list[dict], requested_location: str) -> list[dict]:
+    """Rank catalogue listings by distance from a Google Maps-resolved location."""
+    origin = _google_maps_coordinates(requested_location)
+    if not origin:
+        return []
+
+    ranked = []
+    for listing in properties:
+        coordinates = _listing_coordinates(listing)
+        if not coordinates:
+            continue
+        item = listing.copy()
+        item["distance_km"] = round(_haversine_km(origin, coordinates), 1)
+        item["distance_source"] = "Google Maps geocoding"
+        ranked.append(item)
+    return sorted(ranked, key=lambda item: (item["distance_km"], -float(item.get("rating") or 0)))
 
 
 def _requested_city_from_text(text: str, properties: list[dict]) -> Optional[str]:
@@ -137,6 +208,20 @@ def add_map_links(properties: list[dict]) -> list[dict]:
 def nearby_locations_for(location: str) -> list[str]:
     """Return nearby metro-city suggestions for a requested location."""
     normalized = _normalise(location)
+    locality_parents = {
+        "whitefield": ["Bengaluru"],
+        "electronic city": ["Bengaluru"],
+        "sarjapur": ["Bengaluru"],
+        "gachibowli": ["Hyderabad"],
+        "madhapur": ["Hyderabad"],
+        "kukatpally": ["Hyderabad"],
+        "dwarka expressway": ["Gurugram"],
+        "navi mumbai": ["Mumbai"],
+        "thane": ["Mumbai"],
+    }
+    for locality, cities in locality_parents.items():
+        if locality in normalized:
+            return cities
     if any(term in normalized for term in ("delhi", "new delhi")):
         return ["Noida", "Gurugram", "Faridabad", "Ghaziabad"]
     if "gurugram" in normalized:
@@ -374,7 +459,28 @@ def search_properties_from_message(message: str, limit: int = 6) -> list[dict]:
                 ], source="direct")
 
     nearby_matches = []
-    if direct_matches and requested_location:
+    # If the requested locality has no listing, resolve it with Google Maps and
+    # show the closest catalogue entries instead of returning an empty search.
+    # Listing coordinates must be accurate for this ranking to be meaningful.
+    if not direct_matches and requested_location:
+        distance_ranked = _rank_by_google_maps_distance(
+            [p for p in properties if matches_criteria(p)], requested_location
+        )
+        if distance_ranked:
+            nearby_matches = build_result_set(distance_ranked, source="nearby")[:max(1, min(3, limit))]
+
+        # A predictable fallback lets local development work before a Maps key
+        # is configured, for common localities such as Whitefield.
+        if not nearby_matches:
+            nearby_names = nearby_locations_for(requested_location)
+            nearby_candidates = [
+                p for p in properties
+                if matches_criteria(p)
+                and any(location_matches(f'{p["location"]} {p["city"]}', name) for name in nearby_names)
+            ]
+            if nearby_candidates:
+                nearby_matches = build_result_set(nearby_candidates, source="nearby")[:max(1, min(3, limit))]
+    elif direct_matches and requested_location:
         nearby_names = nearby_locations_for(requested_location)
         if nearby_names:
             included_ids = {int(item["id"]) for item in direct_matches}
@@ -464,7 +570,15 @@ def search_properties(
     direct_results = add_map_links(add_valid_image_urls(results[:max(1, min(limit, 12))]))
 
     nearby_results = []
-    if location:
+    if location and not direct_results:
+        distance_ranked = _rank_by_google_maps_distance(properties, location)
+        if distance_ranked:
+            nearby_results = add_map_links(add_valid_image_urls(
+                distance_ranked[:max(1, min(3, limit))]
+            ))
+            for item in nearby_results:
+                item["source"] = "nearby"
+    if location and not nearby_results:
         nearby_names = nearby_locations_for(location)
         if nearby_names:
             included_ids = {int(item["id"]) for item in direct_results}

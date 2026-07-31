@@ -38,6 +38,24 @@ def test_bangalore_alias_matches_bengaluru_catalogue():
     )
 
 
+def test_unknown_whitefield_location_falls_back_to_nearby_bengaluru_listings():
+    results = search_properties_from_message("Show me properties in Whitefield under 10 Cr", limit=3)
+
+    assert not results, "Whitefield should have no exact catalogue listing in this fixture"
+    nearby = get_last_nearby_results()
+    assert nearby, "expected a nearby fallback when Whitefield has no exact listing"
+    assert all(property_data["city"].casefold() == "bengaluru" for property_data in nearby)
+
+
+def test_short_nearby_location_request_returns_fallback_listings():
+    results = search_properties_from_message("Near Whitefield", limit=3)
+
+    assert not results
+    nearby = get_last_nearby_results()
+    assert len(nearby) == 3
+    assert all(property_data["city"].casefold() == "bengaluru" for property_data in nearby)
+
+
 def test_supported_locations_include_major_cities():
     locations = get_supported_locations()
 
