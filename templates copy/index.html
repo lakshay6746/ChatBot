@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Huvo AI | Property Assistant</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<!-- Markdown parser + sanitizer for bot replies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+<div class="chat-container">
+
+    <header class="header">
+        <img class="brand-logo" src="{{ url_for('static', filename='huvo.svg') }}" alt="Huvo AI">
+        <span class="brand-name">Huvo AI</span>
+    </header>
+
+    <div id="chat-box"></div>
+
+    <div class="input-area">
+
+        <input
+            type="text"
+            id="message"
+            placeholder="Search homes, locations, budgets..."
+        >
+
+        <button id="send-btn" onclick="sendMessage()" aria-label="Send message">Send</button>
+
+    </div>
+
+</div>
+
+<script>
+const input = document.getElementById("message");
+const chat = document.getElementById("chat-box");
+const sendBtn = document.getElementById("send-btn");
+const displayedProperties = new Map();
+
+input.addEventListener("keypress", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Prevent HTML/script injection from user text (user bubble)
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+// Render bot replies as sanitized Markdown -> HTML
+function renderBotMessage(text) {
+  const rawHtml = marked.parse(text ?? "", { breaks: true });
+  const cleanHtml = DOMPurify.sanitize(rawHtml);
+  return `<div class="message bot">${cleanHtml}</div>`;
+}
+
+function propertyCard(p) {
+  displayedProperties.set(String(p.id), p);
+  const price = Number(p.price);
+  const priceDisplay = isNaN(price) ? "N/A" : price.toLocaleString();
+  const imageUrl = propertyImageUrl(p);
+  // Accept both the current JSON field names and earlier card field names.
+  p.area = p.area_sqft ?? p.area ?? "N/A";
+  p.contact_name = p.contact_person ?? p.contact_name ?? "Not provided";
+
+  return `
+    <div class="property-card">
+      <img class="property-image" src="${imageUrl}" alt="${escapeHtml(p.title ?? "Property")}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='/static/first.jpg';">
+
+
+
+      <div class="property-title">&#127969; ${escapeHtml(p.title)}</div>
+      <div class="badge">&#11088; Premium Property</div>
+      <div class="property-info">
+        <div>&#128205; ${escapeHtml(p.location)}</div>
+        <div>&#128176; &#8377;${priceDisplay}</div>
+        <div>&#128208; ${escapeHtml(p.area)} sqft</div>
+        <div>&#128719; ${escapeHtml(p.bedrooms)} Bedrooms</div>
+        <div>&#128705; ${escapeHtml(p.bathrooms)} Bathrooms</div>
+        <div>&#128663; Parking : ${escapeHtml(p.parking)}</div>
+        <div>&#128715; ${escapeHtml(p.furnished)}</div>
+      </div>
+      <div class="contact">
+        &#128100; ${escapeHtml(p.contact_name)}
+        <br>
+        &#128222; ${escapeHtml(p.contact)}
+      </div>
+      <button class="details-btn" data-id="${escapeHtml(p.id ?? "")}">View Details</button>
+    </div>
+  `;
+}
+
+function propertyImageUrl(p) {
+  // Normalise older data that stores Windows-style paths such as
+  // "static\\first.jpg", then fall back to a file Flask always serves.
+  const image = String(p.image || "").replaceAll("\\", "/");
+  if (!image) return "/static/first.jpg";
+  return image.startsWith("/") ? image : `/${image.replace(/^\.\//, "")}`;
+}
+
+function showPropertyDetails(p) {
+  const price = Number(p.price);
+  const priceDisplay = isNaN(price) ? "N/A" : price.toLocaleString();
+  const mapQuery = [p.location, p.city, p.state, p.country].filter(Boolean).join(", ");
+  const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
+  const mapPageUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+  const amenities = Array.isArray(p.amenities) && p.amenities.length
+    ? p.amenities.map(amenity => `<span class="amenity">${escapeHtml(amenity)}</span>`).join("")
+    : '<span class="muted">Amenities not listed</span>';
+
+  document.getElementById("property-modal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="property-modal" id="property-modal" role="dialog" aria-modal="true" aria-label="Property details">
+      <div class="property-modal__panel">
+        <button class="property-modal__close" type="button" aria-label="Close details">&times;</button>
+        <img class="property-modal__image" src="${propertyImageUrl(p)}" alt="${escapeHtml(p.title ?? "Property")}">
+        <div class="property-modal__content">
+          <p class="property-modal__eyebrow">${escapeHtml(p.status ?? "Property")}</p>
+          <h2>${escapeHtml(p.title)}</h2>
+          <p class="property-modal__location">&#128205; ${escapeHtml(p.location)}, ${escapeHtml(p.state)}</p>
+          <section class="property-map">
+            <div class="property-map__heading">
+              <h3>Location</h3>
+              <a href="${mapPageUrl}" target="_blank" rel="noopener noreferrer">Open in Google Maps &#8599;</a>
+            </div>
+            <iframe src="${mapEmbedUrl}" title="Map for ${escapeHtml(p.title ?? "property")}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+          </section>
+          <div class="property-modal__facts">
+            <div><span>Price</span><strong>&#8377;${priceDisplay}</strong></div>
+            <div><span>Type</span><strong>${escapeHtml(p.type)}</strong></div>
+            <div><span>Area</span><strong>${escapeHtml(p.area_sqft)} sqft</strong></div>
+            <div><span>Bedrooms</span><strong>${escapeHtml(p.bedrooms)}</strong></div>
+          </div>
+          <h3>Amenities</h3>
+          <div class="amenities">${amenities}</div>
+          <div class="property-modal__contact">
+            <strong>${escapeHtml(p.contact_person ?? "Sales team")}</strong>
+            <a href="tel:${escapeHtml(p.contact ?? "")}">&#128222; ${escapeHtml(p.contact ?? "Not available")}</a>
+            <a href="mailto:${escapeHtml(p.email ?? "")}">${escapeHtml(p.email ?? "")}</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+// Handle clicks on dynamically-added "View Details" buttons
+chat.addEventListener("click", function (e) {
+  const btn = e.target.closest(".details-btn");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const property = displayedProperties.get(id);
+  if (property) showPropertyDetails(property);
+});
+
+document.addEventListener("click", function (e) {
+  const modal = document.getElementById("property-modal");
+  if (modal && (e.target === modal || e.target.closest(".property-modal__close"))) {
+    modal.remove();
+  }
+});
+
+let isSending = false;
+
+async function sendMessage() {
+  if (isSending) return; // stop double-submits
+
+  const message = input.value.trim();
+  if (message === "") return;
+
+  isSending = true;
+  input.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+
+  chat.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message user">${escapeHtml(message)}</div>`
+  );
+  input.value = "";
+
+
+const typingId = `typing-${Date.now()}`;
+
+chat.insertAdjacentHTML(
+  "beforeend",
+  `
+<div class="message bot typing" id="${typingId}">
+    <div class="typing-loader">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+</div>
+`
+);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const response = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    document.getElementById(typingId)?.remove();
+
+    if (data.properties && data.properties.length > 0) {
+      data.properties.forEach(p => {
+        chat.insertAdjacentHTML("beforeend", propertyCard(p));
+      });
+    } else {
+      chat.insertAdjacentHTML("beforeend", renderBotMessage(data.reply ?? ""));
+    }
+  } catch (err) {
+    document.getElementById(typingId)?.remove();
+    chat.insertAdjacentHTML(
+      "beforeend",
+      `<div class="message bot error">Something went wrong. Please try again.</div>`
+    );
+    console.error("Chat request failed:", err);
+  } finally {
+    isSending = false;
+    input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    input.focus();
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+</script>
+
+</body>
+</html>

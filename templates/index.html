@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Havo Ai</title>
+<title>Huvo AI | Property Assistant</title>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
@@ -17,9 +17,10 @@
 
 <div class="chat-container">
 
-    <div class="header">
-        🤖 Huvo Ai
-    </div>
+    <header class="header">
+        <img class="brand-logo" src="{{ url_for('static', filename='huvo.svg') }}" alt="Huvo AI">
+        <span class="brand-name">Huvo AI</span>
+    </header>
 
     <div id="chat-box"></div>
 
@@ -28,11 +29,17 @@
         <input
             type="text"
             id="message"
-            placeholder="Ask anything..."
+            placeholder="Search homes, locations, budgets..."
         >
 
-        <button id="send-btn" onclick="sendMessage()">➤</button>
+        <button class="chat-send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send message">Send</button>
 
+    </div>
+
+    <div class="quick-actions" aria-label="Suggested prompts">
+        <button class="quick-action-btn" type="button" data-action="investment">📈 <span>Investment</span></button>
+        <button class="quick-action-btn" type="button" data-message="Show affordable properties for a first home">🏠 <span>First Home</span></button>
+        <button class="quick-action-btn" type="button" data-message="Show premium properties for upgrading my home">✨ <span>Upgrading</span></button>
     </div>
 
 </div>
@@ -42,6 +49,222 @@ const input = document.getElementById("message");
 const chat = document.getElementById("chat-box");
 const sendBtn = document.getElementById("send-btn");
 const displayedProperties = new Map();
+
+function useSuggestedPrompt(message) {
+  input.value = message;
+  sendMessage();
+}
+
+function showInvestmentChoices() {
+  chat.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message user">Investment</div>
+     <div class="message bot investment-prompt">
+       <div>What would you like to do?</div>
+       <small>Pick one to get started.</small>
+     </div>
+     <div class="chat-actions" aria-label="Investment options">
+       <button class="chat-action-btn" type="button" data-message="Show investment properties">🔍 <span>Find a New Property</span></button>
+       <button class="chat-action-btn" type="button" data-message="Help me deep-dive on an investment property">🏗️ <span>Deep-dive on a property</span></button>
+     </div>`
+  );
+  requestAnimationFrame(() => {
+    chat.scrollTop = chat.scrollHeight;
+  });
+}
+
+function showFirstHomeChoices() {
+  chat.insertAdjacentHTML("beforeend", `
+    <div class="message bot first-home-intro">Hi! I'm <strong>Huvo AI</strong>, your AI real estate advisor. What best describes you?<small>This helps me personalize my recommendations.</small></div>
+    <div class="message user">First Home</div>
+    <div class="message bot investment-prompt"><div>What would you like to do?</div><small>Pick one to get started.</small></div>
+    <div class="chat-actions" aria-label="First home options">
+      <button class="chat-action-btn" type="button" data-message="Show affordable properties for a first home">&#128269; <span>Find a New Property</span></button>
+      <button class="chat-action-btn" type="button" data-message="Help me deep-dive on a first-home property">&#127959; <span>Deep-dive on a property</span></button>
+    </div>`);
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+function showFirstHomeLocationChoices(maxBudget) {
+  chat.insertAdjacentHTML("beforeend", `
+    <div class="message user">Budget up to ${formatBudget(maxBudget)}</div>
+    <div class="message bot location-prompt"><div>Where are you looking to buy?</div><small>Pick a location or type your preferred area.</small></div>
+    <section class="location-card" data-search-type="first-home" data-max-budget="${maxBudget}" aria-label="Choose a location">
+      <label class="location-search"><span aria-hidden="true">&#128205;</span><input id="first-home-location" type="search" placeholder="Search area, locality, or neighbourhood" autocomplete="off"></label>
+      <div class="location-quick-actions"><button type="button" data-location="Bengaluru">Bengaluru</button><button type="button" data-location="Hyderabad">Hyderabad</button><button type="button" data-location="Mumbai">Mumbai</button><button type="button" data-location="Delhi">Delhi</button><button type="button" data-location="Pune">Pune</button></div>
+      <button class="location-continue" type="button">Search properties</button>
+    </section>`);
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+function showInvestmentLocationChoices(maxBudget) {
+  chat.insertAdjacentHTML("beforeend", `
+    <div class="message user">Budget up to ${formatBudget(maxBudget)}</div>
+    <div class="message bot location-prompt"><div>Which location are you interested in?</div><small>Pick a location or type your preferred area.</small></div>
+    <section class="location-card" data-search-type="investment" data-max-budget="${maxBudget}" aria-label="Choose an investment location">
+      <label class="location-search"><span aria-hidden="true">&#128205;</span><input type="search" placeholder="Search area, locality, or neighbourhood" autocomplete="off"></label>
+      <div class="location-quick-actions"><button type="button" data-location="Bengaluru">Bengaluru</button><button type="button" data-location="Hyderabad">Hyderabad</button><button type="button" data-location="Mumbai">Mumbai</button><button type="button" data-location="Delhi">Delhi</button><button type="button" data-location="Pune">Pune</button></div>
+      <button class="location-continue" type="button">Search properties</button>
+    </section>`);
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+function showGuidedLocationChoices() {
+  chat.insertAdjacentHTML("beforeend", `
+    <section class="location-card" data-guided-step="location" aria-label="Choose a location">
+      <label class="location-search"><span aria-hidden="true">&#128205;</span><input type="search" placeholder="Search area, locality, or neighbourhood" autocomplete="off"></label>
+      <div class="location-quick-actions"><button type="button" data-location="Bengaluru">Bengaluru</button><button type="button" data-location="Hyderabad">Hyderabad</button><button type="button" data-location="Mumbai">Mumbai</button><button type="button" data-location="Delhi">Delhi</button><button type="button" data-location="Pune">Pune</button></div>
+      <button class="location-continue" type="button">Continue</button>
+    </section>`);
+}
+
+function formatBudget(lakhs) {
+  if (lakhs >= 100) {
+    const crores = lakhs / 100;
+    return `₹${Number.isInteger(crores) ? crores : crores.toFixed(1)} Cr`;
+  }
+  return `₹${lakhs}L`;
+}
+
+function updateBudgetRange() {
+  const minInput = document.getElementById("budget-min");
+  const maxInput = document.getElementById("budget-max");
+  const minValue = Math.min(Number(minInput.value), Number(maxInput.value) - 10);
+  const maxValue = Math.max(Number(maxInput.value), Number(minInput.value) + 10);
+  minInput.value = minValue;
+  maxInput.value = maxValue;
+  document.getElementById("budget-min-label").textContent = formatBudget(minValue);
+  document.getElementById("budget-max-label").textContent = formatBudget(maxValue);
+  document.querySelector(".budget-range__fill").style.left = `${((minValue - 50) / 950) * 100}%`;
+  document.querySelector(".budget-range__fill").style.right = `${100 - ((maxValue - 50) / 950) * 100}%`;
+}
+
+function showBudgetChoices(searchType = "investment") {
+  const prompt = searchType === "guided" ? "" : `
+    <div class="message user">Find a New Property</div>
+    <div class="message bot budget-prompt"><div>What is your budget range?</div><small>This helps me find the perfect match.</small></div>`;
+  chat.insertAdjacentHTML("beforeend", `
+    ${prompt}
+    <section class="budget-card" data-search-type="${searchType}" aria-label="Choose your budget range">
+      <div class="budget-values"><div><small>MIN</small><strong id="budget-min-label">₹50L</strong></div><div><small>MAX</small><strong id="budget-max-label">₹2.5 Cr</strong></div></div>
+      <div class="budget-range"><div class="budget-range__track"></div><div class="budget-range__fill"></div><input id="budget-min" type="range" min="50" max="1000" step="10" value="50" aria-label="Minimum budget"><input id="budget-max" type="range" min="50" max="1000" step="10" value="250" aria-label="Maximum budget"></div>
+      <div class="budget-scale"><span>50L</span><span>10Cr+</span></div><small class="budget-quick-label">QUICK SELECT</small>
+      <div class="budget-quick-actions"><button type="button" data-budget-min="50" data-budget-max="100">Under 1 Cr</button><button type="button" data-budget-min="100" data-budget-max="300">1-3 Cr</button><button type="button" data-budget-min="300" data-budget-max="500">3-5 Cr</button><button type="button" data-budget-min="500" data-budget-max="1000">Above 5 Cr</button></div>
+      <button class="budget-continue" type="button">Continue</button>
+    </section>`);
+  updateBudgetRange();
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+function renderProjectOptions(projects, filter = "") {
+  const query = filter.trim().toLowerCase();
+  const matches = projects.filter(project => project.toLowerCase().includes(query)).slice(0, 30);
+  const list = document.getElementById("project-options");
+  if (!list) return;
+  list.innerHTML = matches.length
+    ? matches.map(project => `<button class="project-option" type="button" data-project="${escapeHtml(project)}">${escapeHtml(project)}</button>`).join("")
+    : '<p class="project-empty">No matching projects found.</p>';
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+async function showProjectPicker() {
+  chat.insertAdjacentHTML("beforeend", `
+    <div class="message user">Deep-dive on a property</div>
+    <div class="message bot project-prompt">Which project do you want to explore?</div>
+    <section class="project-picker" aria-label="Choose a project">
+      <input id="project-search" type="search" placeholder="Search for a project..." autocomplete="off" aria-label="Search for a project">
+      <div id="project-options" class="project-options"><p class="project-empty">Loading projects...</p></div>
+    </section>`);
+  requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+
+  try {
+    const response = await fetch("/projects");
+    if (!response.ok) throw new Error("Could not load projects");
+    window.availableProjects = (await response.json()).projects || [];
+    renderProjectOptions(window.availableProjects);
+  } catch (error) {
+    document.getElementById("project-options").innerHTML = '<p class="project-empty">Projects could not be loaded. Please try again.</p>';
+  }
+}
+
+document.addEventListener("click", function (e) {
+  const quickAction = e.target.closest(".quick-action-btn");
+  if (quickAction) {
+    if (quickAction.dataset.action === "investment") {
+      showInvestmentChoices();
+    } else if (quickAction.dataset.message === "Show affordable properties for a first home") {
+      showFirstHomeChoices();
+    } else {
+      useSuggestedPrompt(quickAction.dataset.message || "");
+    }
+    return;
+  }
+
+  const chatAction = e.target.closest(".chat-action-btn");
+  if (chatAction) {
+    if (chatAction.dataset.message === "Show investment properties") showBudgetChoices("investment");
+    else if (chatAction.dataset.message === "Show affordable properties for a first home") showBudgetChoices("first-home");
+    else if (chatAction.dataset.message === "Help me deep-dive on an investment property" || chatAction.dataset.message === "Help me deep-dive on a first-home property") showProjectPicker();
+    else useSuggestedPrompt(chatAction.dataset.message || "");
+    return;
+  }
+
+  const budgetQuickAction = e.target.closest(".budget-quick-actions button");
+  if (budgetQuickAction) {
+    document.getElementById("budget-min").value = budgetQuickAction.dataset.budgetMin;
+    document.getElementById("budget-max").value = budgetQuickAction.dataset.budgetMax;
+    updateBudgetRange();
+    return;
+  }
+
+  const budgetContinue = e.target.closest(".budget-continue");
+  if (budgetContinue) {
+    const maxBudget = Number(document.getElementById("budget-max").value);
+    const budgetType = budgetContinue.closest(".budget-card").dataset.searchType;
+    if (budgetType === "guided") {
+      useSuggestedPrompt(formatBudget(maxBudget));
+    } else if (budgetType === "first-home") {
+      showFirstHomeLocationChoices(maxBudget);
+    } else {
+      showInvestmentLocationChoices(maxBudget);
+    }
+    return;
+  }
+
+  const locationQuickAction = e.target.closest(".location-quick-actions button");
+  if (locationQuickAction) {
+    locationQuickAction.closest(".location-card").querySelector("input").value = locationQuickAction.dataset.location;
+    return;
+  }
+
+  const locationContinue = e.target.closest(".location-continue");
+  if (locationContinue) {
+    const locationCard = locationContinue.closest(".location-card");
+    const locationInput = locationCard.querySelector("input");
+    const location = locationInput.value.trim();
+    if (!location) {
+      locationInput.focus();
+      return;
+    }
+    if (locationCard.dataset.searchType === "investment") {
+      useSuggestedPrompt(`Show investment properties under ${formatBudget(Number(locationCard.dataset.maxBudget))} in ${location}`);
+    } else if (locationCard.dataset.guidedStep === "location") {
+      useSuggestedPrompt(location);
+    } else {
+      useSuggestedPrompt(`Show affordable properties for a first home under ${formatBudget(Number(locationCard.dataset.maxBudget))} in ${location}`);
+    }
+  }
+
+  const projectOption = e.target.closest(".project-option");
+  if (projectOption) {
+    useSuggestedPrompt(`Tell me about the project ${projectOption.dataset.project}`);
+  }
+});
+
+document.addEventListener("input", function (e) {
+  if (e.target.matches("#budget-min, #budget-max")) updateBudgetRange();
+  if (e.target.matches("#project-search")) renderProjectOptions(window.availableProjects || [], e.target.value);
+});
 
 input.addEventListener("keypress", function (e) {
   if (e.key === "Enter") {
@@ -72,28 +295,32 @@ function propertyCard(p) {
   // Accept both the current JSON field names and earlier card field names.
   p.area = p.area_sqft ?? p.area ?? "N/A";
   p.contact_name = p.contact_person ?? p.contact_name ?? "Not provided";
+  const mapHtml = p.map_link
+    ? `<a class="map-link" href="${escapeHtml(p.map_link)}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>`
+    : '';
 
   return `
     <div class="property-card">
-      <img class="property-image" src="${imageUrl}" alt="${escapeHtml(p.title ?? "Property")}" onerror="this.onerror=null; this.src='/static/first.jpg';">
+      <img class="property-image" src="${imageUrl}" alt="${escapeHtml(p.title ?? "Property")}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='/static/first.jpg';">
 
 
 
-      <div class="property-title">🏡 ${escapeHtml(p.title)}</div>
-      <div class="badge">⭐ Premium Property</div>
+      <div class="property-title">&#127969; ${escapeHtml(p.title)}</div>
+      <div class="badge">&#11088; Premium Property</div>
+      ${mapHtml ? `<div class="property-map-link">${mapHtml}</div>` : ''}
       <div class="property-info">
-        <div>📍 ${escapeHtml(p.location)}</div>
-        <div>💰 ₹${priceDisplay}</div>
-        <div>📐 ${escapeHtml(p.area)} sqft</div>
-        <div>🛏 ${escapeHtml(p.bedrooms)} Bedrooms</div>
-        <div>🛁 ${escapeHtml(p.bathrooms)} Bathrooms</div>
-        <div>🚗 Parking : ${escapeHtml(p.parking)}</div>
-        <div>🛋 ${escapeHtml(p.furnished)}</div>
+        <div>&#128205; ${escapeHtml(p.location)}</div>
+        <div>&#128176; &#8377;${priceDisplay}</div>
+        <div>&#128208; ${escapeHtml(p.area)} sqft</div>
+        <div>&#128719; ${escapeHtml(p.bedrooms)} Bedrooms</div>
+        <div>&#128705; ${escapeHtml(p.bathrooms)} Bathrooms</div>
+        <div>&#128663; Parking : ${escapeHtml(p.parking)}</div>
+        <div>&#128715; ${escapeHtml(p.furnished)}</div>
       </div>
       <div class="contact">
-        👤 ${escapeHtml(p.contact_name)}
+        &#128100; ${escapeHtml(p.contact_name)}
         <br>
-        📞 ${escapeHtml(p.contact)}
+        &#128222; ${escapeHtml(p.contact)}
       </div>
       <button class="details-btn" data-id="${escapeHtml(p.id ?? "")}">View Details</button>
     </div>
@@ -101,7 +328,35 @@ function propertyCard(p) {
 }
 
 function propertyImageUrl(p) {
-  return p.image || "/static/first.jpg";
+  // Normalise older data that stores Windows-style paths such as
+  // "static\\first.jpg", then fall back to a file Flask always serves.
+  const image = String(p.image || "").replaceAll("\\", "/");
+  if (!image) return "/static/first.jpg";
+  return image.startsWith("/") ? image : `/${image.replace(/^\.\//, "")}`;
+}
+
+function renderPropertyRow(properties) {
+  return `<div class="property-results" role="list">${properties.map(propertyCard).join("")}</div>`;
+}
+
+function renderSection(title, properties, extraClass = "") {
+  return `
+    <div class="property-section ${extraClass}">
+      ${renderPropertyRow(properties)}
+    </div>
+  `;
+}
+
+function showPropertyResults(properties, nearbyProperties = []) {
+  // Preserve earlier property cards so the conversation can keep showing
+  // the full list of results instead of replacing them on every query.
+  if (properties && properties.length > 0) {
+    chat.insertAdjacentHTML("beforeend", renderSection("", properties));
+  }
+  if (nearbyProperties && nearbyProperties.length > 0) {
+    chat.insertAdjacentHTML("beforeend", renderSection("", nearbyProperties, "nearby-section"));
+  }
+  chat.querySelectorAll(".property-results").forEach(row => row.scrollTo({ left: 0 }));
 }
 
 function showPropertyDetails(p) {
@@ -123,16 +378,16 @@ function showPropertyDetails(p) {
         <div class="property-modal__content">
           <p class="property-modal__eyebrow">${escapeHtml(p.status ?? "Property")}</p>
           <h2>${escapeHtml(p.title)}</h2>
-          <p class="property-modal__location">📍 ${escapeHtml(p.location)}, ${escapeHtml(p.state)}</p>
+          <p class="property-modal__location">&#128205; ${escapeHtml(p.location)}, ${escapeHtml(p.state)}</p>
           <section class="property-map">
             <div class="property-map__heading">
               <h3>Location</h3>
-              <a href="${mapPageUrl}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>
+              <a href="${mapPageUrl}" target="_blank" rel="noopener noreferrer">Open in Google Maps &#8599;</a>
             </div>
             <iframe src="${mapEmbedUrl}" title="Map for ${escapeHtml(p.title ?? "property")}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
           </section>
           <div class="property-modal__facts">
-            <div><span>Price</span><strong>₹${priceDisplay}</strong></div>
+            <div><span>Price</span><strong>&#8377;${priceDisplay}</strong></div>
             <div><span>Type</span><strong>${escapeHtml(p.type)}</strong></div>
             <div><span>Area</span><strong>${escapeHtml(p.area_sqft)} sqft</strong></div>
             <div><span>Bedrooms</span><strong>${escapeHtml(p.bedrooms)}</strong></div>
@@ -141,7 +396,7 @@ function showPropertyDetails(p) {
           <div class="amenities">${amenities}</div>
           <div class="property-modal__contact">
             <strong>${escapeHtml(p.contact_person ?? "Sales team")}</strong>
-            <a href="tel:${escapeHtml(p.contact ?? "")}">📞 ${escapeHtml(p.contact ?? "Not available")}</a>
+            <a href="tel:${escapeHtml(p.contact ?? "")}">&#128222; ${escapeHtml(p.contact ?? "Not available")}</a>
             <a href="mailto:${escapeHtml(p.email ?? "")}">${escapeHtml(p.email ?? "")}</a>
           </div>
         </div>
@@ -215,12 +470,22 @@ chat.insertAdjacentHTML(
     const data = await response.json();
     document.getElementById(typingId)?.remove();
 
+    // Keep nearby recommendations directly below the explanatory message.
+    // The matching properties remain above it.
     if (data.properties && data.properties.length > 0) {
-      data.properties.forEach(p => {
-        chat.insertAdjacentHTML("beforeend", propertyCard(p));
-      });
-    } else {
-      chat.insertAdjacentHTML("beforeend", renderBotMessage(data.reply ?? ""));
+      showPropertyResults(data.properties);
+    }
+
+    chat.insertAdjacentHTML("beforeend", renderBotMessage(data.reply ?? ""));
+
+    if (data.next_step === "location") {
+      showGuidedLocationChoices();
+    } else if (data.next_step === "budget") {
+      showBudgetChoices("guided");
+    }
+
+    if (data.nearby_properties && data.nearby_properties.length > 0) {
+      showPropertyResults([], data.nearby_properties);
     }
   } catch (err) {
     document.getElementById(typingId)?.remove();
@@ -234,7 +499,6 @@ chat.insertAdjacentHTML(
     input.disabled = false;
     if (sendBtn) sendBtn.disabled = false;
     input.focus();
-    chat.scrollTop = chat.scrollHeight;
   }
 }
 </script>

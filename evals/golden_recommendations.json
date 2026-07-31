@@ -1,0 +1,17 @@
+[
+  {
+    "id": "city_budget_type",
+    "query": {"location": "Hyderabad", "property_type": "Villa", "max_price": 10000000},
+    "expect": {"minimum_results": 1, "all_match": ["location", "property_type", "max_price"]}
+  },
+  {
+    "id": "project_name",
+    "query": {"property_name": "Lodha"},
+    "expect": {"minimum_results": 1, "all_match": ["property_name"]}
+  },
+  {
+    "id": "bedrooms_and_possession",
+    "query": {"location": "Hyderabad", "bedrooms": 3, "possession_by": 2032},
+    "expect": {"minimum_results": 1, "all_match": ["location", "bedrooms", "possession_by"]}
+  }
+]

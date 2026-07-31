@@ -1,0 +1,68 @@
+---
+general
+
+0.1. Write a document
+    - requirements
+    - current design
+    - options, decisions, tradeoffs
+    - improvements that you feel needs to be there
+    - features that you feel needs to be there
+
+0.3. Ask others what the next requirements are and have a discussion.
+
+---
+high
+
+1. improving core recommendation
+
+    current
+        location: City or area to search in, e.g. "Jaipur". Case-insensitive
+        substring match against each listing's location.
+        property_type: Type of property, e.g. "apartment", "villa", "plot".
+        max_price: Maximum price in rupees. Listings above this are excluded.
+        bedrooms: Exact number of bedrooms required.
+        possession_by: Latest acceptable possession year, e.g. 2031.
+        limit: Maximum number of listings to return. Defaults to six cards.
+
+
+2. evaluations
+how do we know the chatbot is recommending property correctly?
+how to create a golden data set and test our recommendation
+try to make a basic evaluation system for the chatbot
+
+
+---
+mid
+
+3. maybe we can keep a state where users preferences are saved 
+
+4. answering questions about the property, and why its good or bad,
+
+5. search by property name is not present.
+
+6. maybe we can keep a state for users shortlisted properties so they can compare
+
+7. what if multiple properties match how are we going to rank them or sort them
+we need some way to sort them or reduce them to less options.
+
+8. using google maps to answer questions of about location
+
+9. explaining the brochure, and floor plan, master plan.
+
+10. explain the pricing and the units that are available etc.
+
+----
+low
+
+- regex extraction vs llm extraction
+
+- storing message history in the db
+  keeping session diff for diff people
+
+-   we are going through every propery in a json
+    if it is in db, we have to care about indexes, 
+
+
+- try using langraph for llm agnostic
+
+---
