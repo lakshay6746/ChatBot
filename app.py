@@ -183,6 +183,18 @@ def is_nearby_only_request(message: str) -> bool:
     return bool(re.search(r"\bnear\s+[a-z0-9]", message.casefold()))
 
 
+def is_creator_question(message: str) -> bool:
+    """Recognise creator questions, including common short forms and typos."""
+    query = message.casefold()
+    return bool(re.search(r"\b(?:who\s+(?:created|made|developed)|creator)\b", query))
+
+
+def is_greeting(message: str) -> bool:
+    """Recognise a message that is only a casual greeting."""
+    words = re.findall(r"[a-z]+", message.casefold())
+    return bool(words) and all(word in {"hi", "hii", "hiii", "hello", "hey", "hola"} for word in words)
+
+
 def has_supported_location(message: str) -> bool:
     """Return whether a message contains a city or locality in the catalogue."""
     query = message.casefold()
@@ -360,7 +372,11 @@ def chatbot():
 
     nearby_results = get_last_nearby_results()
 
-    if intake_reply:
+    if is_creator_question(user_message):
+        reply = "I was created by Lakshay Khatri."
+    elif is_greeting(user_message):
+        reply = "Hello! I am Tanisha AI. I can help you find properties by location, budget, and requirements."
+    elif intake_reply:
         reply = intake_reply
     elif property_question:
         reply = build_property_reply(search_message, properties, nearby_results)
