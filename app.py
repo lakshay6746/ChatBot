@@ -375,7 +375,7 @@ def chatbot():
     if is_creator_question(user_message):
         reply = "I was created by Lakshay Khatri."
     elif is_greeting(user_message):
-        reply = "Hello! I am Tanisha AI. I can help you find properties by location, budget, and requirements."
+        reply = "Hello! I am Huvo Ai. I can help you find properties by location, budget, and requirements."
     elif intake_reply:
         reply = intake_reply
     elif property_question:
